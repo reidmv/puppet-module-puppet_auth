@@ -24,7 +24,7 @@ Puppet::Type.newtype(:puppet_auth) do
     isnamevar
   end
 
-  newproperty(:path_regex, :boolean => true) do
+  newparam(:path_regex, :boolean => true) do
     desc "Whether the path is specified as a regex."
 
     newvalues(:true, :false)
@@ -34,55 +34,58 @@ Puppet::Type.newtype(:puppet_auth) do
     end
   end
 
-  newparam(:ins_before) do
-    desc "Optional XPath expression to specify where to insert the auth rule.
-
-This parameter takes special values working as aliases:
-
-- `first allow`, mapping to `path[allow][1]`;
-- `last allow`, mapping to `path[allow][last()]`;
-- `first deny`, mapping to `path[count(allow)=0][1]`;
-- `last deny`, mapping to path[count(allow)=0][last()]`"
-  end
-
-  newparam(:ins_after) do
-    desc "Optional XPath expression to specify where to insert the auth rule.
-
-This parameter takes special values working as aliases:
-
-- `first allow`, mapping to `path[allow][1]`;
-- `last allow`, mapping to `path[allow][last()]`;
-- `first deny`, mapping to `path[count(allow)=0][1]`;
-- `last deny`, mapping to path[count(allow)=0][last()]`"
-  end
-
   newproperty(:environments, :array_matching => :all) do
     desc "The list of environments the rule applies to."
   end
 
   newproperty(:methods, :array_matching => :all) do
     isnamevar
-    desc "The list of methods the rule applies to. Possible values are:
+    desc <<-EOS
+      The list of methods the rule applies to. Possible values are:
 
-- find;
-- search;
-- save;
-- destroy."
+        - find;
+        - search;
+        - save;
+        - destroy.
+    EOS
   end
 
   newproperty(:allow_ip, :array_matching => :all) do
-    desc "The list of IPs allowed for this rule.
-Requires Puppet 3.0.0 or greater."
+    desc <<-EOS
+      The list of IPs allowed for this rule.
+      Requires Puppet 3.0.0 or greater."
+    EOS
+  end
+
+  newproperty(:priority) do
+    desc <<-EOS
+      The priority by which to order the rule. Numeric. Greater than zero.
+      The smaller the number the earlier in the list the rule will be inserted.
+    EOS
+    validate do |val|
+      val.to_i != 0
+    end
+  end
+
+  newparam(:allow, :array_matching => :all) do
+    desc <<-EOS
+      A list of certnames allowed for this rule.
+      Note that these can also be managed seperately. Setting this
+      parameter creates appropriate puppet_auth_allow resources.
+    EOS
+    munge { |allow| [allow].flatten }
   end
 
   newproperty(:authenticated) do
-    desc "The type of authentication for the rule. Possible values are:
+    desc <<-EOS
+      The type of authentication for the rule. Possible values are:
 
-- yes;
-- no;
-- on;
-- off;
-- any."
+        - yes;
+        - no;
+        - on;
+        - off;
+        - any.
+    EOS
   end
 
   newparam(:target) do
@@ -108,24 +111,42 @@ Requires Puppet 3.0.0 or greater."
     self[:target]
   end
 
+  def generate
+    allows = []
+    if parameters[:allow]
+      [parameters[:allow].value].flatten.each do |allow|
+        allows << Puppet::Type.type(:puppet_auth_allow).new({
+          :ensure => :present,
+          :name   => "#{parameters[:path].value}: allow #{allow}",
+          :path   => parameters[:path].value,
+          :allow  => allow
+        })
+      end
+    end
+    allows
+  end
+
   def self.title_patterns
-    identity = lambda {|x| x}
-    methods  = lambda {|x| x.gsub(/^Auth rule (?:for|matching) [^ ]* \((.*)\)$/, '\1').split(', ') }
-    path     = lambda {|x| x.gsub(/^Auth rule (?:for|matching) ([^ ]*) \(.*\)$/, '\1') }
+    identity   = lambda {|x| x}
+    methods    = lambda {|x| x.gsub(/^Auth rule (?:for|matching) [^ ]* \((.*)\)$/, '\1').split(', ') }
+    path       = lambda {|x| x.gsub(/^Auth rule (?:for|matching) ([^ ]*) \(.*\)$/, '\1') }
+    path_regex = lambda {|x| x =~ /^Auth rule matching / ? :true : :false }
     [
       [
-        /^(Auth rule (?:for|matching) ([^ ]*) \((.*)\))$/,
+        /^(Auth rule (for|matching) ([^ ]*) \((.*)\))$/,
         [
-          [ :name,    identity ],
-          [ :path,    path     ],
-          [ :methods, methods  ]
+          [ :name,       identity   ],
+          [ :path_regex, path_regex ],
+          [ :path,       path       ],
+          [ :methods,    methods    ]
         ]
       ],
       [
-        /^(Auth rule (?:for|matching) ([^ ]*))$/,
+        /^(Auth rule (for|matching) ([^ ]*))$/,
         [
-          [ :name,    identity ],
-          [ :path,    path     ],
+          [ :name,       identity   ],
+          [ :path_regex, path_regex ],
+          [ :path,       path       ]
         ]
       ],
       [

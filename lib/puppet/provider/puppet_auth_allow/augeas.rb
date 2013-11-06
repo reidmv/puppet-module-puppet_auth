@@ -30,7 +30,7 @@ Puppet::Type.type(:puppet_auth_allow).provide(:augeas) do
 
       settings.each do |pathnode|
         # Set $resource for each
-        aug.defvar('resource', pathnode)
+        setvars(aug)
 
         path   = aug.get(pathnode)
         allows = attr_aug_reader_allow(aug)
@@ -51,15 +51,23 @@ Puppet::Type.type(:puppet_auth_allow).provide(:augeas) do
 
   def create
     augopen! do |aug|
-      aug.defvar('allow', "$target/path[.='#{resource[:path]}']/allow")
-      aug.insert("$allow") if aug.match("$allow/*").empty?
+      #aug.defvar('allow', "$target/path[.='#{resource[:path]}']/allow")
+      allow = "$target/path[.='#{resource[:path]}']/allow"
+      aug.set(allow, nil) if aug.match("#{allow}/*").empty?
 
-      last_allow = aug.match("$allow/*[last()]").last
+      last_allow = aug.match("#{allow}/*[last()]").last
       last_index = last_allow ? last_allow.split('/').last : '0'
       next_index = (last_index.to_i + 1).to_s
 
-      aug.insert("$allow/*[last()]", next_index, false)
-      aug.set("$allow/*[.='']", resource[:allow])
+      aug.set("#{allow}/#{next_index}", resource[:allow])
+    end
+  end
+
+  def destroy
+    augopen! do |aug|
+      aug.rm('$resource')
+      aug.defvar('allow', "$target/path[.='#{resource[:path]}']/allow")
+      aug.rm('$allow') if aug.match('$allow/*').empty?
     end
   end
 

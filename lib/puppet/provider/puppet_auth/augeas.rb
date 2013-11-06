@@ -10,13 +10,6 @@ Puppet::Type.type(:puppet_auth).provide(:augeas) do
 
   include PuppetX::AugeasProvider::Provider
 
-  INS_ALIASES = {
-    "first allow" => "path[allow][1]",
-    "last allow"  => "path[allow][last()]",
-    "first deny"  => "path[count(allow)=0][1]",
-    "last deny"   => "path[count(allow)=0][last()]",
-  }
-
   default_file { Puppet[:rest_authconfig] }
 
   lens { 'Puppet_Auth.lns' }
@@ -40,6 +33,76 @@ Puppet::Type.type(:puppet_auth).provide(:augeas) do
     raise 'Changing path_regex property not implemented'
   end
 
+  def priority
+    result = nil
+    augopen do |aug|
+      paths    = aug.match("$target/path")
+      resource = aug.match('$resource').first
+      default  = 10
+      max      = nil
+      paths.each do |path|
+        tagged_priority = aug.get("#{path}/#comment[.=~regexp('^Priority: [0-9]+$')]")
+        tagged_priority.gsub!(/Priority: ([0-9]+)/, '\1') if tagged_priority
+
+        if !tagged_priority
+          localmax = [(max or 0), default].max
+        else
+          localmax = tagged_priority
+        end
+
+        current_priority = [localmax.to_i, (tagged_priority or 0).to_i].max
+        if path == resource
+          result = current_priority
+          break
+        else
+          max = current_priority
+        end
+      end
+    end
+    result.to_s
+  end
+
+  def priority=(should)
+    augopen! do |aug|
+      insert_before_node = nil
+      nodes         = aug.match("$target/path")
+      resource      = aug.match('$resource').first
+      default       = 10
+      max           = 0
+      priority      = "#comment[.=~regexp('^Priority: [0-9]+$')]"
+
+      if aug.match('$resource/#comment').empty? or aug.match("$resource/#{priority}").empty?
+        aug.insert('$resource/*[1]', '#comment', true)
+        aug.set('$resource/#comment[1]', "Priority: #{should}")
+      else
+        aug.set("$resource/#{priority}", "Priority: #{should}")
+      end
+
+      nodes.each do |node|
+        tagged_priority = aug.get("#{node}/#{priority}")
+        tagged_priority.gsub!(/Priority: ([0-9]+)/, '\1') if tagged_priority
+        current_priority = [max, default, (tagged_priority or 0).to_i].max
+        if current_priority > should.to_i
+          insert_before_node = node
+          break
+        else
+          max = current_priority
+        end
+      end
+
+      if insert_before_node
+        aug.insert(insert_before_node, 'path', true)
+        aug.mv("$resource", insert_before_node)
+      else
+        aug.insert("$target/path[last()]", 'path', false)
+        aug.mv('$resource', '$target/path[last()]')
+      end
+    end
+  end
+
+  def order=(val)
+  end
+
   def self.instances
     resources = []
     augopen do |aug|
@@ -56,46 +119,49 @@ Puppet::Type.type(:puppet_auth).provide(:augeas) do
         allow_ip = attr_aug_reader_allow_ip(aug)
         authenticated = attr_aug_reader_authenticated(aug)
         name = Puppet::Type::Puppet_auth.generate_name(path, path_regex, methods)
+        priority_comment = aug.get("#{node}/#comment[.=~regexp('^Priority: [0-9]+$')]")
+        priority = priority_comment ? priority_comment.gsub(/[^\d]*(\d+)/, '\1').to_i : 10
 
-        entry = {:ensure => :present, :name => name,
-                 :path => path, :path_regex => path_regex,
-                 :environments => environments, :methods => methods,
-                 :allow_ip => allow_ip, :authenticated => authenticated}
+        entry = {
+          :ensure        => :present,
+          :name          => name,
+          :path          => path,
+          :path_regex    => path_regex,
+          :environments  => environments,
+          :methods       => methods,
+          :allow_ip      => allow_ip,
+          :authenticated => authenticated,
+          :priority      => priority
+        }
+
         resources << new(entry) if entry[:path]
       end
     end
-    resources.reverse
+    resources
   end
 
   def create
-    apath = resource[:path]
-    apath_regex = resource[:path_regex]
-    before = resource[:ins_before]
-    after = resource[:ins_after]
-    environments = resource[:environments]
-    methods = resource[:methods]
-    allow_ip = resource[:allow_ip]
+    apath         = resource[:path]
+    apath_regex   = resource[:path_regex]
+    environments  = resource[:environments]
+    methods       = resource[:methods]
+    allow_ip      = resource[:allow_ip]
+    allow         = resource[:allow]
     authenticated = resource[:authenticated]
-    augopen! do |aug|
-      if before or after
-        expr = before || after
-        if INS_ALIASES.has_key?(expr)
-          expr = INS_ALIASES[expr]
-        end
-        aug.insert("$target/#{expr}", "path", before ? true : false)
-        aug.set("$target/path[.='']", apath)
-      end
 
-      aug.set(resource_path, apath)
-      # Refresh $resource
+    augopen! do |aug|
+      aug.insert('$target/path', 'path', false)
+      aug.set("$target/path[.='']", apath)
+
+      ## Refresh $resource
       setvars(aug)
-      if apath_regex == :true
-        aug.set('$resource/operator', "~")
-      end
-      attr_aug_writer_environments(aug, environments)
-      attr_aug_writer_methods(aug, methods)
-      attr_aug_writer_allow_ip(aug, allow_ip)
-      attr_aug_writer_authenticated(aug, authenticated)
+
+      aug.set('$resource/operator', "~") if apath_regex == :true
+      attr_aug_writer_environments(aug, environments) if environments
+      attr_aug_writer_methods(aug, methods) if methods
+      attr_aug_writer_allow_ip(aug, allow_ip) if allow_ip
+      attr_aug_writer_allow(aug, allow) if allow
+      attr_aug_writer_authenticated(aug, authenticated) if authenticated
     end
   end
 
@@ -119,8 +185,15 @@ Puppet::Type.type(:puppet_auth).provide(:augeas) do
     :purge_ident => true
   )
 
+  attr_aug_accessor(:allow,
+    :type        => :array,
+    :sublabel    => :seq,
+    :purge_ident => true
+  )
+
   attr_aug_accessor(:authenticated,
     :label       => 'auth',
     :purge_ident => true
   )
+
 end

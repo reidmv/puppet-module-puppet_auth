@@ -10,10 +10,12 @@ Puppet::Type.newtype(:puppet_auth_allow) do
 
   newparam(:allow) do
     desc "The string defining the allow entry."
+    isnamevar
   end
 
   newparam(:path) do
     desc "The path for the auth rule."
+    isnamevar
   end
 
   newparam(:name) do
@@ -36,8 +38,8 @@ Puppet::Type.newtype(:puppet_auth_allow) do
 
   def self.title_patterns
     identity = lambda {|x| x}
-    path     = lambda {|x| x.gsub(/^(.*): .*$/, '\1') }
-    allow    = lambda {|x| x.gsub(/^.*: (.*)$/, '\1') }
+    path     = lambda {|x| x.gsub(/^(.*): allow .*$/, '\1') }
+    allow    = lambda {|x| x.gsub(/^.*: allow (.*)$/, '\1') }
     [
       [
         /^((.*): allow (.*))$/,
