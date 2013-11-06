@@ -20,11 +20,12 @@ Puppet::Type.newtype(:puppet_auth) do
   end
 
   newparam(:path) do
-    desc "The path for the auth rule."
     isnamevar
+    isrequired
+    desc "The path for the auth rule."
   end
 
-  newparam(:path_regex, :boolean => true) do
+  newproperty(:path_regex, :boolean => true) do
     desc "Whether the path is specified as a regex."
 
     newvalues(:true, :false)
@@ -40,6 +41,7 @@ Puppet::Type.newtype(:puppet_auth) do
 
   newproperty(:methods, :array_matching => :all) do
     isnamevar
+    isrequired
     desc <<-EOS
       The list of methods the rule applies to. Possible values are:
 
@@ -117,7 +119,7 @@ Puppet::Type.newtype(:puppet_auth) do
 
   def generate
     allows = []
-    if parameters[:allow]
+    if parameters[:allow] and parameters[:path]
       [parameters[:allow].value].flatten.each do |allow|
         allows << Puppet::Type.type(:puppet_auth_allow).new({
           :ensure => :present,
@@ -132,25 +134,22 @@ Puppet::Type.newtype(:puppet_auth) do
 
   def self.title_patterns
     identity   = lambda {|x| x}
-    methods    = lambda {|x| x.gsub(/^Auth rule (?:for|matching) [^ ]* \((.*)\)$/, '\1').split(', ') }
-    path       = lambda {|x| x.gsub(/^Auth rule (?:for|matching) ([^ ]*) \(.*\)$/, '\1') }
-    path_regex = lambda {|x| x =~ /^Auth rule matching / ? :true : :false }
+    methods    = lambda {|x| x.gsub(/^Auth rule for [^ ]* \((.*)\)$/, '\1').split(', ') }
+    path       = lambda {|x| x.gsub(/^Auth rule for ([^ ]*) \(.*\)$/, '\1') }
     [
       [
-        /^(Auth rule (for|matching) ([^ ]*) \((.*)\))$/,
+        /^(Auth rule for ([^ ]*) \((.*)\))$/,
         [
-          [ :name,       identity   ],
-          [ :path_regex, path_regex ],
-          [ :path,       path       ],
-          [ :methods,    methods    ]
+          [ :name,    identity ],
+          [ :path,    path     ],
+          [ :methods, methods  ]
         ]
       ],
       [
-        /^(Auth rule (for|matching) ([^ ]*))$/,
+        /^(Auth rule for ([^ ]*))$/,
         [
-          [ :name,       identity   ],
-          [ :path_regex, path_regex ],
-          [ :path,       path       ]
+          [ :name, identity ],
+          [ :path, path     ]
         ]
       ],
       [
@@ -165,8 +164,7 @@ Puppet::Type.newtype(:puppet_auth) do
   def self.generate_name(path, path_regex, methods)
     methods_string = methods.empty? ? '' : " (#{methods.join(', ')})"
     pathmethods = "#{path}#{methods_string}"
-    formatching = (path_regex == :false) ? 'for' : 'matching'
-    name = "Auth rule #{formatching} #{pathmethods}"
+    name = "Auth rule for #{pathmethods}"
   end
 
 end

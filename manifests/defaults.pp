@@ -2,17 +2,19 @@ class puppet_auth::defaults {
 
   # Note: default priority is 100
 
-  puppet_auth { 'Auth rule matching ^/catalog/([^/]+)$ (find)':
-    ensure   => 'present',
-    methods  => ['find'],
-    allow    => '$1',
-    priority => '50',
+  puppet_auth { 'Auth rule for ^/catalog/([^/]+)$ (find)':
+    path_regex => true,
+    ensure     => 'present',
+    methods    => ['find'],
+    allow      => '$1',
+    priority   => '50',
   }
-  puppet_auth { 'Auth rule matching ^/node/([^/]+)$ (find)':
-    ensure   => 'present',
-    methods  => ['find'],
-    allow    => '$1',
-    priority => '52',
+  puppet_auth { 'Auth rule for ^/node/([^/]+)$ (find)':
+    path_regex => true,
+    ensure     => 'present',
+    methods    => ['find'],
+    allow      => '$1',
+    priority   => '52',
   }
   puppet_auth { 'Auth rule for /file':
     ensure   => 'present',

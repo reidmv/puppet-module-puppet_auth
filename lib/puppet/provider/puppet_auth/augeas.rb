@@ -24,13 +24,20 @@ Puppet::Type.type(:puppet_auth).provide(:augeas) do
 
   def path_regex
     augopen do |aug|
-      aug.match("#{resource_path}/operator[.='~']").empty? ? :false : :true
+      aug.match("#{resource_path}/operator").empty? ? :false : :true
     end
   end
 
   def path_regex=(val)
-    # TODO
-    raise 'Changing path_regex property not implemented'
+    augopen! do |aug|
+      case val
+      when :true
+        aug.insert('$resource/*[1]', 'operator', true)
+        aug.set('$resource/operator', '~')
+      when :false
+        aug.rm('$resource/operator')
+      end
+    end
   end
 
   def priority
@@ -124,7 +131,7 @@ Puppet::Type.type(:puppet_auth).provide(:augeas) do
         aug.defvar('resource', node)
 
         path = aug.get(node)
-        path_regex = aug.match("#{node}/operator[.='~']").empty? ? :false : :true
+        path_regex = aug.match("#{node}/operator").empty? ? :false : :true
         environments = attr_aug_reader_environments(aug)
         methods = attr_aug_reader_methods(aug)
         allow_ip = attr_aug_reader_allow_ip(aug)
