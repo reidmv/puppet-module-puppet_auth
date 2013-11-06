@@ -39,7 +39,7 @@ Puppet::Type.type(:puppet_auth).provide(:augeas) do
       paths    = aug.match("$target/path")
       resource = aug.match('$resource').first
       default  = Puppet::Type::Puppet_auth.default_priority
-      max      = nil
+      max      = 0
 
       paths.each do |path|
         tagged_priority = aug.get("#{path}/#comment[.=~regexp('^Priority: [0-9]+$')]")
@@ -51,7 +51,7 @@ Puppet::Type.type(:puppet_auth).provide(:augeas) do
           localmax = tagged_priority
         end
 
-        current_priority = [localmax.to_i, (tagged_priority or 0).to_i].max
+        current_priority = [max, localmax.to_i, (tagged_priority or 0).to_i].max
         if path == resource
           result = current_priority
           break
@@ -73,8 +73,10 @@ Puppet::Type.type(:puppet_auth).provide(:augeas) do
       priority      = "#comment[.=~regexp('^Priority: [0-9]+$')]"
 
       if aug.match('$resource/#comment').empty? or aug.match("$resource/#{priority}").empty?
-        aug.insert('$resource/*[1]', '#comment', true)
-        aug.set('$resource/#comment[1]', "Priority: #{should}")
+        # We can't insert the comment into the tree above the operator
+        i = aug.match('$resource/*[1]').first =~ %r{/operator$} ? '2' : '1'
+        aug.insert("$resource/*[#{i}]", '#comment', true)
+        aug.set("$resource/*[#{i}]", "Priority: #{should}")
       else
         aug.set("$resource/#{priority}", "Priority: #{should}")
       end
@@ -82,7 +84,14 @@ Puppet::Type.type(:puppet_auth).provide(:augeas) do
       nodes.each do |node|
         tagged_priority = aug.get("#{node}/#{priority}")
         tagged_priority.gsub!(/Priority: ([0-9]+)/, '\1') if tagged_priority
-        current_priority = [max, default, (tagged_priority or 0).to_i].max
+
+        if !tagged_priority
+          localmax = [(max or 0), default].max
+        else
+          localmax = tagged_priority
+        end
+
+        current_priority = [max, localmax.to_i, (tagged_priority or 0).to_i].max
         if current_priority > should.to_i
           insert_before_node = node
           break
