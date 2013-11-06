@@ -30,7 +30,7 @@ Puppet::Type.type(:puppet_auth_allow).provide(:augeas) do
 
       settings.each do |pathnode|
         # Set $resource for each
-        setvars(aug)
+        aug.defvar('resource', pathnode)
 
         path   = aug.get(pathnode)
         allows = attr_aug_reader_allow(aug)
