@@ -3,12 +3,12 @@
 # Copyright (c) 2012 Raphaël Pinson
 # Licensed under the Apache License, Version 2.0
 
-require 'puppetx/augeasprovider/provider'
+require 'augeasproviders/provider'
 
 Puppet::Type.type(:puppet_auth).provide(:augeas) do
   desc "Uses Augeas API to update a rule in Puppet's auth.conf."
 
-  include PuppetX::AugeasProvider::Provider
+  include AugeasProviders::Provider
 
   default_file { Puppet[:rest_authconfig] }
 
@@ -38,8 +38,9 @@ Puppet::Type.type(:puppet_auth).provide(:augeas) do
     augopen do |aug|
       paths    = aug.match("$target/path")
       resource = aug.match('$resource').first
-      default  = 10
+      default  = Puppet::Type::Puppet_auth.default_priority
       max      = nil
+
       paths.each do |path|
         tagged_priority = aug.get("#{path}/#comment[.=~regexp('^Priority: [0-9]+$')]")
         tagged_priority.gsub!(/Priority: ([0-9]+)/, '\1') if tagged_priority
@@ -67,7 +68,7 @@ Puppet::Type.type(:puppet_auth).provide(:augeas) do
       insert_before_node = nil
       nodes         = aug.match("$target/path")
       resource      = aug.match('$resource').first
-      default       = 10
+      default       = Puppet::Type::Puppet_auth.default_priority
       max           = 0
       priority      = "#comment[.=~regexp('^Priority: [0-9]+$')]"
 
@@ -98,9 +99,6 @@ Puppet::Type.type(:puppet_auth).provide(:augeas) do
         aug.mv('$resource', '$target/path[last()]')
       end
     end
-  end
-
-  def order=(val)
   end
 
   def self.instances

@@ -3,12 +3,12 @@
 # Copyright (c) 2012 Raphaël Pinson
 # Licensed under the Apache License, Version 2.0
 
-require 'puppetx/augeasprovider/provider'
+require 'augeasproviders/provider'
 
 Puppet::Type.type(:puppet_auth_allow).provide(:augeas) do
   desc "Uses Augeas API to update an allow entry in Puppet's auth.conf."
 
-  include PuppetX::AugeasProvider::Provider
+  include AugeasProviders::Provider
 
   default_file { Puppet[:rest_authconfig] }
 

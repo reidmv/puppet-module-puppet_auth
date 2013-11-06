@@ -67,6 +67,10 @@ Puppet::Type.newtype(:puppet_auth) do
     end
   end
 
+  def self.default_priority
+    100
+  end
+
   newparam(:allow, :array_matching => :all) do
     desc <<-EOS
       A list of certnames allowed for this rule.
