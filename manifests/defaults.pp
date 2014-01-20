@@ -22,10 +22,11 @@ class puppet_auth::defaults {
     priority => '54',
   }
   puppet_auth { 'Auth rule for /certificate_revocation_list/ca (find)':
-    ensure   => 'present',
-    methods  => ['find'],
-    allow    => '*',
-    priority => '56',
+    ensure        => 'present',
+    methods       => ['find'],
+    allow         => '*',
+    authenticated => 'any',
+    priority      => '56',
   }
   puppet_auth { 'Auth rule for /report (save)':
     ensure   => 'present',
